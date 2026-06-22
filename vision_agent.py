@@ -64,7 +64,7 @@ def log_session_event(gesture, action):
 
 # Load .env variables manually and initialize Gemini SDK client
 def load_env():
-    global GEMINI_API_KEY, gemini_client
+    global GEMINI_API_KEY, AFFERENS_API_KEY, gemini_client
     if os.path.exists(".env"):
         try:
             with open(".env", "r", encoding="utf-8") as f:
@@ -74,6 +74,8 @@ def load_env():
                         k, v = line.split("=", 1)
                         if k.strip() == "GEMINI_API_KEY":
                             GEMINI_API_KEY = v.strip()
+                        elif k.strip() == "AFFERENS_API_KEY":
+                            AFFERENS_API_KEY = v.strip()
         except Exception as e:
             print(f"Failed to load .env: {e}")
 
@@ -90,13 +92,7 @@ def load_afferens_config():
     global AFFERENS_API_KEY, CONVERSATION_DIR
     try:
         home = Path.home()
-        mcp_config_path = home / ".gemini" / "antigravity-ide" / "mcp_config.json"
-        if mcp_config_path.exists():
-            with open(mcp_config_path, "r", encoding="utf-8") as f:
-                config_data = json.load(f)
-                AFFERENS_API_KEY = config_data.get("mcpServers", {}).get("afferens", {}).get("env", {}).get("AFFERENS_API_KEY", "")
-        
-        # Resolve active conversation ID
+        # Resolve active conversation ID. (AFFERENS_API_KEY is loaded exclusively from .env/environment).
         brain_path = home / ".gemini" / "antigravity-ide" / "brain"
         if brain_path.exists():
             subdirs = [d for d in brain_path.iterdir() if d.is_dir()]
