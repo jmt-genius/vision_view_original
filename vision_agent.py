@@ -89,22 +89,23 @@ def load_env():
 def load_afferens_config():
     global AFFERENS_API_KEY, CONVERSATION_DIR
     try:
-        user_profile = os.environ.get("USERPROFILE", "C:\\Users\\tarun")
-        mcp_config_path = os.path.join(user_profile, ".gemini", "antigravity-ide", "mcp_config.json")
-        if os.path.exists(mcp_config_path):
+        home = Path.home()
+        mcp_config_path = home / ".gemini" / "antigravity-ide" / "mcp_config.json"
+        if mcp_config_path.exists():
             with open(mcp_config_path, "r", encoding="utf-8") as f:
                 config_data = json.load(f)
                 AFFERENS_API_KEY = config_data.get("mcpServers", {}).get("afferens", {}).get("env", {}).get("AFFERENS_API_KEY", "")
         
         # Resolve active conversation ID
-        brain_path = os.path.join(user_profile, ".gemini", "antigravity-ide", "brain")
-        if os.path.exists(brain_path):
-            subdirs = [os.path.join(brain_path, d) for d in os.listdir(brain_path) if os.path.isdir(os.path.join(brain_path, d))]
+        brain_path = home / ".gemini" / "antigravity-ide" / "brain"
+        if brain_path.exists():
+            subdirs = [d for d in brain_path.iterdir() if d.is_dir()]
             if subdirs:
-                subdirs.sort(key=os.path.getmtime, reverse=True)
-                CONVERSATION_DIR = subdirs[0]
+                subdirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                CONVERSATION_DIR = str(subdirs[0])
     except Exception as e:
         print(f"Failed to load config: {e}")
+
 
 # Initialize session log file
 def init_session_log():
@@ -263,7 +264,10 @@ def action_fist():
     
     def _perform():
         workspace_root = Path("c:/JMT/vision_view")
+        if not workspace_root.exists():
+            workspace_root = Path(".")
         valid_exts = (".js", ".py", ".json", ".html", ".css")
+
         newest_file = None
         newest_mtime = 0
 
@@ -385,7 +389,10 @@ def action_four_fingers():
     
     def _perform():
         workspace = Path("c:/JMT/vision_view")
+        if not workspace.exists():
+            workspace = Path(".")
         commit_id = str(random.randint(1000, 9999))
+
         commit_msg = f"handshift-{commit_id}"
         results = []
         
@@ -440,10 +447,14 @@ def action_two_hands():
         # Wait for browser window and page load to focus the input field
         time.sleep(2.5)
         try:
-            # Paste the current clipboard content using PyAutoGUI
-            pyautogui.hotkey("ctrl", "v")
+            # Paste the current clipboard content using PyAutoGUI (check for macOS cmd key)
+            if sys.platform == "darwin":
+                pyautogui.hotkey("command", "v")
+            else:
+                pyautogui.hotkey("ctrl", "v")
         except Exception as e:
             print(f"Failed to paste clipboard content: {e}")
+
 
     threading.Thread(target=paste_worker, daemon=True).start()
     app_ui.show_result_popup("Gemini Paste Triggered", "Opened Gemini in your browser.\n\nAttempting to paste the clipboard contents into the chat input area.")
