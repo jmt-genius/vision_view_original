@@ -1,3 +1,4 @@
+#!/Library/Frameworks/Python.framework/Versions/3.11/bin/python3
 import cv2
 import mediapipe as mp
 import math

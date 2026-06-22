@@ -1,0 +1,25 @@
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1782147491.836636 4810154 gl_context.cc:357] GL version: 2.1 (2.1 Metal - 90.5), renderer: Apple M2
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+W0000 00:00:1782147491.861296 4810244 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782147491.867691 4810250 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/google/protobuf/symbol_database.py:55: UserWarning: SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead. SymbolDatabase.GetPrototype() will be removed soon.
+  warnings.warn('SymbolDatabase.GetPrototype() is deprecated. Please '
+Exception in Tkinter callback
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/tkinter/__init__.py", line 1948, in __call__
+    return self.func(*args)
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/tkinter/__init__.py", line 861, in callit
+    func(*args)
+  File "/Users/srilekha/Documents/vision_view_original/vision_agent.py", line 728, in update_frame
+    HOLD_COUNT = 0
+  File "/Users/srilekha/Documents/vision_view_original/vision_agent.py", line 594, in update_gesture_ui
+    def update_gesture_ui(self, name, progress):
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/srilekha/Documents/vision_view_original/vision_agent.py", line 591, in update_progress
+    width = int((progress / 100.0) * 200)
+  File "/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/tkinter/__init__.py", line 2822, in coords
+    self.tk.call((self._w, 'coords') + args))]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_tkinter.TclError: invalid command name ".!frame.!frame2.!canvas"

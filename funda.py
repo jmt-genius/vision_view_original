@@ -12,4 +12,4 @@ while True:
             n1 = float(input("Num 1: ")); n2 = float(input("Num 2: "))
             ops = {'1': add, '2': subtract, '3': multiply, '4': divide}
             print("Result:", ops[choice](n1, n2))
-        except ValueError: print("Invalid input.")
+        except ValueError: print("Invalid input")
