@@ -9,11 +9,17 @@ import subprocess
 import webbrowser
 import urllib.parse
 from datetime import datetime
+import random
 import requests
 import tkinter as tk
 from tkinter import scrolledtext, messagebox
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageGrab
 from google import genai
+import threading
+import re
+from pathlib import Path
+import pyautogui
+
 
 # App Global State
 AFFERENS_API_KEY = ""
@@ -75,7 +81,7 @@ def load_env():
     if GEMINI_API_KEY:
         try:
             gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-            print("[SYSTEM] Gemini SDK client initialized (gemini-3.5-flash)")
+            print("[SYSTEM] Gemini SDK client initialized (gemini-3.1-flash-lite-preview)")
         except Exception as e:
             print(f"[SYSTEM] Failed to initialize Gemini client: {e}")
 
@@ -116,7 +122,7 @@ def call_gemini_api(prompt):
 
     try:
         response = gemini_client.models.generate_content(
-            model="gemini-3.5-flash",
+            model="gemini-3.1-flash-lite-preview",
             contents=prompt
         )
         return response.text
@@ -225,172 +231,248 @@ def classify_frame_gestures(multi_hand_landmarks):
 
 # 7-Gesture Actions Implementation
 
-# ✊ Fist (0 fingers): Google Search clipboard
-def action_fist(clipboard_text):
-    log_session_event("fist", "Google Search Clipboard")
-    if not clipboard_text:
-        clipboard_text = "HandShift"
-    url = f"https://www.google.com/search?q={urllib.parse.quote(clipboard_text)}"
-    webbrowser.open(url)
-    app_ui.show_result_popup("Google Search Triggered", f"Searching Google for:\n\n'{clipboard_text}'")
-
-# ☝️ One Finger (1 finger): Explain Last Error
-def action_one_finger():
-    log_session_event("one_finger", "Explain Last Error")
-    if not CONVERSATION_DIR:
-        app_ui.show_result_popup("Explain Last Error", "Error: Conversation task log directory could not be resolved.")
-        return
-        
-    tasks_dir = os.path.join(CONVERSATION_DIR, ".system_generated", "tasks")
-    if not os.path.exists(tasks_dir):
-        app_ui.show_result_popup("Explain Last Error", "No task error logs exist yet.")
-        return
-        
-    log_files = [os.path.join(tasks_dir, f) for f in os.listdir(tasks_dir) if f.endswith(".log")]
-    if not log_files:
-        app_ui.show_result_popup("Explain Last Error", "No log output found.")
-        return
-        
-    log_files.sort(key=os.path.getmtime, reverse=True)
-    latest_log = log_files[0]
+def run_async_action(title, action_func, *args, **kwargs):
+    """Helper to run a heavy operation in a background thread and show a loading state popup."""
+    # Instantiates the result popup immediately with a loading state
+    loading_msg = "⏳ Thinking... Please wait while the HandShift agent processes your request..."
+    popup, title_lbl, text_area = app_ui.show_result_popup(title, loading_msg)
     
-    try:
-        with open(latest_log, "r", encoding="utf-8", errors="ignore") as f:
-            lines = f.readlines()
-        log_snippet = "".join(lines[-40:])
+    def worker():
+        try:
+            result = action_func(*args, **kwargs)
+            if not result:
+                result = "No response received."
+        except Exception as e:
+            result = f"Error during execution:\n{e}"
+            
+        def update_ui():
+            if popup.winfo_exists():
+                cleaned = app_ui.clean_markdown_text(result)
+                text_area.configure(state="normal")
+                text_area.delete("1.0", "end")
+                text_area.insert("1.0", cleaned)
+                text_area.configure(state="disabled")
         
-        prompt = f"Explain this command error trace in plain English, and provide a clear suggested fix:\n\n{log_snippet}"
-        explanation = call_gemini_api(prompt)
-        app_ui.show_result_popup(f"Last Error Explained ({os.path.basename(latest_log)})", explanation)
-    except Exception as e:
-        app_ui.show_result_popup("Explain Last Error", f"Failed to parse error: {e}")
+        root.after(0, update_ui)
+        
+    threading.Thread(target=worker, daemon=True).start()
 
-# ✌️ Peace Sign (2 fingers): Summarize Current File
-def action_peace_sign():
-    log_session_event("peace_sign", "Summarize Current File")
-    workspace_root = "c:\\JMT\\vision_view"
-    valid_exts = (".js", ".py", ".json", ".html", ".css")
-    newest_file = None
-    newest_mtime = 0
+# ✊ Fist (0 fingers): Summarize Current File
+def action_fist():
+    log_session_event("fist", "Summarize Current File")
     
-    for root, dirs, files in os.walk(workspace_root):
-        if any(exclude in root for exclude in (".git", "node_modules", "__pycache__")):
-            continue
-        for file in files:
-            if file.endswith(valid_exts) and file != "vision_agent.py" and not file.startswith(".env"):
-                file_path = os.path.join(root, file)
+    def _perform():
+        workspace_root = Path("c:/JMT/vision_view")
+        valid_exts = (".js", ".py", ".json", ".html", ".css")
+        newest_file = None
+        newest_mtime = 0
+
+        if not workspace_root.exists():
+            return f"Workspace path not found: {workspace_root}"
+
+        for file_path in workspace_root.rglob("*"):
+            if any(exclude in file_path.parts for exclude in (".git", "node_modules", "__pycache__")):
+                continue
+            if file_path.is_file() and file_path.suffix in valid_exts and file_path.name != "vision_agent.py" and not file_path.name.startswith(".env"):
                 try:
-                    mtime = os.path.getmtime(file_path)
+                    mtime = file_path.stat().st_mtime
                     if mtime > newest_mtime:
                         newest_mtime = mtime
                         newest_file = file_path
                 except Exception:
                     continue
-                    
-    if not newest_file:
-        app_ui.show_result_popup("Summarize File", "No active files found to summarize in workspace.")
-        return
-        
-    try:
-        with open(newest_file, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
+
+        if not newest_file:
+            return "No active files found to summarize in workspace."
+
+        try:
+            with open(newest_file, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+
+            prompt = (
+                f"Summarize the purpose, functions, structure, and any TODOs in this code file in clean, concise, plain English.\n"
+                f"Do not use markdown bolding (**) or headers (#). Use plain lists and sections instead.\n\n"
+                f"File: {newest_file.name}\n\nContent:\n{content[:8000]}"
+            )
+            summary = call_gemini_api(prompt)
+            return f"File Summarized: {newest_file.name}\n\n{summary}"
+        except Exception as e:
+            return f"Error reading or summarizing file: {e}"
             
-        prompt = f"Summarize the purpose, functions, structure, and any TODOs in this code file in clean, concise, plain English:\n\nFile: {os.path.basename(newest_file)}\n\nContent:\n{content[:8000]}"
-        summary = call_gemini_api(prompt)
-        app_ui.show_result_popup(f"File Summary: {os.path.basename(newest_file)}", summary)
-    except Exception as e:
-        app_ui.show_result_popup("Summarize File", f"Error summarizing file: {e}")
+    run_async_action("Summarize File", _perform)
 
-# 🤟 Three Fingers (3 fingers): Git Status Snapshot
-def action_three_fingers():
-    log_session_event("three_fingers", "Git Status Snapshot")
-    try:
-        status_res = subprocess.run(["git", "status"], capture_output=True, text=True, cwd="c:\\JMT\\vision_view")
-        diff_res = subprocess.run(["git", "diff", "--stat"], capture_output=True, text=True, cwd="c:\\JMT\vision_view")
-        
-        git_output = f"=== Status ===\n{status_res.stdout}\n=== Stats ===\n{diff_res.stdout}"
-        
-        prompt = f"Summarize this git status and diff statistics in clean, plain English, highlighting the biggest changes and what is currently staged vs unstaged:\n\n{git_output}"
-        summary = call_gemini_api(prompt)
-        app_ui.show_result_popup("Git Status Snapshot", summary)
-    except Exception as e:
-        app_ui.show_result_popup("Git Status", f"Failed to run git: {e}")
+# ☝️ One Finger (1 finger): Explain Last Error
+def action_one_finger():
+    log_session_event("one_finger", "Explain Last Error")
+    
+    def _perform():
+        if not CONVERSATION_DIR:
+            return "Error: Conversation task log directory could not be resolved."
+            
+        tasks_dir = Path(CONVERSATION_DIR) / ".system_generated" / "tasks"
+        if not tasks_dir.exists():
+            return "No task error logs exist yet."
+            
+        log_files = list(tasks_dir.glob("*.log"))
+        if not log_files:
+            return "No log output found."
+            
+        log_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        latest_log = log_files[0]
 
-# 🤘 Four Fingers (4 fingers): Commit Check
-def action_four_fingers():
-    log_session_event("four_fingers", "Commit Check")
-    try:
-        diff_res = subprocess.run(["git", "diff", "--stat"], capture_output=True, text=True, cwd="c:\\JMT\\vision_view")
-        duration = datetime.now() - SESSION_START_TIME
-        duration_mins = int(duration.total_seconds() / 60)
-        
-        prompt = (f"Review these git changes, check if the session is ready for a commit (Session duration: {duration_mins} mins, triggers: {sum(GESTURE_COUNTS.values())}). "
-                  f"Give a clear, one-line verdict starting with either ✅ (go ahead) or ⚠️ (with specific reason why not):\n\n{diff_res.stdout}")
-        
-        verdict = call_gemini_api(prompt)
-        app_ui.show_result_popup("Commit Verdict", verdict)
-    except Exception as e:
-        app_ui.show_result_popup("Commit Check", f"Failed to execute commit check: {e}")
+        try:
+            with open(latest_log, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+            log_snippet = "".join(lines[-40:])
 
-# ✋ Open Hand (5 fingers): Paste clipboard to Gemini
-def action_open_hand(clipboard_text):
-    log_session_event("open_hand", "Paste Clipboard to Gemini")
+            prompt = (
+                f"Explain this command error trace in plain English, and provide a clear suggested fix.\n"
+                f"Do not use markdown formatting like asterisks or headers.\n\n{log_snippet}"
+            )
+            return call_gemini_api(prompt)
+        except Exception as e:
+            return f"Failed to parse error: {e}"
+            
+    run_async_action("Explain Last Error", _perform)
+
+# ✌️ Peace Sign (2 fingers): AI Search from clipboard
+def action_peace_sign(clipboard_text):
+    log_session_event("peace_sign", "AI Search from Clipboard")
     if not clipboard_text:
-        clipboard_text = "(Clipboard Empty)"
-        
-    # 1. Open browser Gemini pre-filled
-    web_url = f"https://gemini.google.com/app?prompt={urllib.parse.quote(clipboard_text)}"
-    webbrowser.open(web_url)
-    
-    # 2. Call API for local popup help
-    prompt = f"The user is stuck on this code, error, or concept. Review this clipboard content and provide instant help, highlighting any issues or fixes:\n\n{clipboard_text}"
-    response = call_gemini_api(prompt)
-    app_ui.show_result_popup("Instant Help (Gemini API)", response)
+        app_ui.show_result_popup("AI Search", "Clipboard is empty. Copy something first!")
+        return
 
-# 🤙 Two Hands (Both hands): End of session report
+    def _perform():
+        prompt = (
+            f"The user wants an AI-powered answer for this query. Give a clear, concise, and helpful response.\n"
+            f"Do not use markdown bolding or headers.\n\n{clipboard_text}"
+        )
+        return call_gemini_api(prompt)
+        
+    run_async_action(f"AI Search: {clipboard_text[:30]}...", _perform)
+
+# 🤟 Three Fingers (3 fingers): Take Screenshot and Analyze
+def action_three_fingers():
+    log_session_event("three_fingers", "Take Screenshot & Analyze")
+    
+    def _perform():
+        try:
+            screenshot = ImageGrab.grab()
+            img_path = Path(CONVERSATION_DIR) / "screenshot.png" if CONVERSATION_DIR else Path("screenshot.png")
+            screenshot.save(img_path)
+
+            if not gemini_client:
+                return f"Screenshot saved to {img_path}. Gemini API key is missing to analyze."
+
+            # Upload using Gemini SDK and run vision query
+            # (Note: Google GenAI SDK can take PIL images directly in contents)
+            prompt = "Analyze this screenshot. Describe what is on the screen, identifying any applications, code, or context clearly."
+            
+            response = gemini_client.models.generate_content(
+                model="gemini-3.5-flash",
+                contents=[prompt, screenshot]
+            )
+            
+            return f"Screenshot Analyzed ({img_path.name}):\n\n{response.text}"
+        except Exception as e:
+            return f"Failed to take screenshot or analyze: {e}"
+            
+    run_async_action("Screenshot Analysis", _perform)
+
+# 🤘 Four Fingers (4 fingers): Git Add + Commit + Push
+def action_four_fingers():
+    log_session_event("four_fingers", "Git Add + Commit + Push")
+    
+    def _perform():
+        workspace = Path("c:/JMT/vision_view")
+        commit_id = str(random.randint(1000, 9999))
+        commit_msg = f"handshift-{commit_id}"
+        results = []
+        
+        try:
+            # git add .
+            add_res = subprocess.run(["git", "add", "."], capture_output=True, text=True, cwd=workspace, check=True)
+            results.append(f"$ git add .\n{add_res.stdout}{add_res.stderr}".strip())
+
+            # git commit -m "handshift-XXXX"
+            commit_res = subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, text=True, cwd=workspace, check=True)
+            results.append(f"$ git commit -m \"{commit_msg}\"\n{commit_res.stdout}{commit_res.stderr}".strip())
+
+            # git push
+            push_res = subprocess.run(["git", "push"], capture_output=True, text=True, cwd=workspace, timeout=20, check=True)
+            results.append(f"$ git push\n{push_res.stdout}{push_res.stderr}".strip())
+            
+            results.append("\n✅ Push successfully completed!")
+        except subprocess.CalledProcessError as e:
+            results.append(f"Command failed: {e.cmd}\nReturn code: {e.returncode}\n{e.stderr}")
+        except subprocess.TimeoutExpired:
+            results.append("⚠️ git push timed out. Check your remote network configuration.")
+        except Exception as e:
+            results.append(f"Unexpected error: {e}")
+            
+        return "\n\n".join(results)
+        
+    run_async_action("Git Auto Commit & Push", _perform)
+
+# ✋ Open Hand (5 fingers): Quick Google Search from clipboard
+def action_open_hand(clipboard_text):
+    log_session_event("open_hand", "Quick Google Search")
+    if not clipboard_text:
+        clipboard_text = "HandShift gesture agent"
+    url = f"https://www.google.com/search?q={urllib.parse.quote(clipboard_text)}"
+    webbrowser.open(url)
+    app_ui.show_result_popup("Google Search Triggered", f"Searching Google for:\n\n'{clipboard_text}'")
+
+# 🤙 Two Hands (Both hands): Gemini Open and Paste Clipboard
 def action_two_hands():
-    log_session_event("two_hands", "End of Session Report")
+    log_session_event("two_hands", "Gemini Open & Paste Clipboard")
     
-    duration = datetime.now() - SESSION_START_TIME
-    duration_str = str(duration).split('.')[0]
-    
-    try:
-        with open(SESSION_LOG_PATH, "r", encoding="utf-8") as f:
-            logs = f.read()
-    except Exception:
-        logs = "(No session logs captured)"
-        
-    prompt = f"Write a clean, 3-bullet summary of the user's development session based on the logs of executed actions. Keep it concise:\n\nSession Duration: {duration_str}\nTotal Gestures: {sum(GESTURE_COUNTS.values())}\n\nLogs:\n{logs}"
-    report = call_gemini_api(prompt)
-    
-    # Save report file
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    report_file = f"report_{date_str}.md"
-    try:
-        with open(report_file, "w", encoding="utf-8") as f:
-            f.write(f"# HandShift Developer Session Report ({date_str})\n\n{report}")
-        log_session_event("system", f"Saved session report to {report_file}")
-    except Exception as e:
-        print(f"Failed to save report: {e}")
-        
-    app_ui.show_result_popup(f"Session Ended! Report Saved ({report_file})", report)
-
-# Coordinator
-def execute_gesture_action(gesture):
-    global LAST_TRIGGERED_GESTURE
-    
+    # Retrieve current clipboard content
     clipboard = ""
     try:
         clipboard = app_ui.root.clipboard_get()
     except Exception:
         pass
-        
+
+    webbrowser.open("https://gemini.google.com")
+    
+    def paste_worker():
+        # Wait for browser window and page load to focus the input field
+        time.sleep(2.5)
+        try:
+            # Paste the current clipboard content using PyAutoGUI
+            pyautogui.hotkey("ctrl", "v")
+        except Exception as e:
+            print(f"Failed to paste clipboard content: {e}")
+
+    threading.Thread(target=paste_worker, daemon=True).start()
+    app_ui.show_result_popup("Gemini Paste Triggered", "Opened Gemini in your browser.\n\nAttempting to paste the clipboard contents into the chat input area.")
+
+
+def wake_up():
+    """Resume from sleep mode."""
+    app_ui.is_sleeping = False
+    app_ui.gesture_lbl.configure(text="Gesture: NONE", fg="#f8fafc")
+    app_ui.status_label.configure(text="Agent Running")
+    app_ui.status_dot.configure(fg="#10b981")
+    app_ui.append_log(f"[{datetime.now().strftime('%H:%M:%S')}] [SYSTEM] Woke up from sleep mode")
+
+# Coordinator
+def execute_gesture_action(gesture):
+    global LAST_TRIGGERED_GESTURE
+
+    clipboard = ""
+    try:
+        clipboard = app_ui.root.clipboard_get()
+    except Exception:
+        pass
+
     if gesture == "fist":
-        action_fist(clipboard)
+        action_fist()
     elif gesture == "one_finger":
         action_one_finger()
     elif gesture == "peace_sign":
-        action_peace_sign()
+        action_peace_sign(clipboard)
     elif gesture == "three_fingers":
         action_three_fingers()
     elif gesture == "four_fingers":
@@ -406,17 +488,23 @@ class HandShiftUI:
         self.root = root
         self.root.title("HandShift")
         self.root.configure(bg="#0c0c0e")
-        self.root.geometry("400x200") # Start in compact mode
+        self.root.geometry("720x280") # Start in compact mode with side-by-side layout
         self.root.resizable(False, False)
         
         self.is_expanded = False
+        self.is_sleeping = False
         
         # Configure Grid weight
-        self.root.columnconfigure(0, weight=1)
+        self.root.columnconfigure(0, weight=3)
+        self.root.columnconfigure(1, weight=2)
         
-        # 1. Header Frame
-        header = tk.Frame(root, bg="#0c0c0e", height=40)
-        header.grid(row=0, column=0, sticky="ew", padx=15, pady=8)
+        # --- Left Pane (Controls and Status) ---
+        left_pane = tk.Frame(root, bg="#0c0c0e")
+        left_pane.grid(row=0, column=0, sticky="nsew", padx=15, pady=10)
+        
+        # 1. Header Frame inside Left Pane
+        header = tk.Frame(left_pane, bg="#0c0c0e", height=40)
+        header.pack(fill="x", pady=4)
         
         brand_label = tk.Label(header, text="HandShift", font=("Outfit", 14, "bold"), fg="#8b5cf6", bg="#0c0c0e")
         brand_label.pack(side="left")
@@ -428,9 +516,9 @@ class HandShiftUI:
         self.status_label = tk.Label(header, text="Agent Running", font=("Inter", 9), fg="#94a3b8", bg="#0c0c0e")
         self.status_label.pack(side="right")
         
-        # 2. Compact Info Panel
-        self.info_panel = tk.Frame(root, bg="#16161d", bd=1, relief="solid")
-        self.info_panel.grid(row=1, column=0, sticky="ew", padx=15, pady=5)
+        # 2. Compact Info Panel inside Left Pane
+        self.info_panel = tk.Frame(left_pane, bg="#16161d", bd=1, relief="solid")
+        self.info_panel.pack(fill="x", pady=5)
         
         self.gesture_lbl = tk.Label(self.info_panel, text="Gesture: NONE", font=("Outfit", 12, "bold"), fg="#f8fafc", bg="#16161d")
         self.gesture_lbl.pack(pady=6)
@@ -439,9 +527,33 @@ class HandShiftUI:
         self.bar_canvas.pack(pady=4)
         self.progress_bar = self.bar_canvas.create_rectangle(0, 0, 0, 6, fill="#8b5cf6", width=0)
         
-        # 3. Toggle View Button (Arrow Button)
-        self.toggle_btn = tk.Button(root, text="▼ Expand Camera Feed & Logs", font=("Inter", 8, "bold"), fg="#94a3b8", bg="#16161d", activeforeground="#f8fafc", activebackground="#8b5cf6", bd=0, padx=8, pady=4, cursor="hand2", command=self.toggle_expanded_view)
-        self.toggle_btn.grid(row=2, column=0, pady=8)
+        # 3. Toggle View Button (Arrow Button) inside Left Pane
+        self.toggle_btn = tk.Button(left_pane, text="▼ Expand Camera Feed & Logs", font=("Inter", 8, "bold"), fg="#94a3b8", bg="#16161d", activeforeground="#f8fafc", activebackground="#8b5cf6", bd=0, padx=8, pady=4, cursor="hand2", command=self.toggle_expanded_view)
+        self.toggle_btn.pack(pady=6)
+        
+        # --- Right Pane (Gesture Legend Table Box) ---
+        right_pane = tk.LabelFrame(root, text=" GESTURE GUIDE ", font=("Outfit", 10, "bold"), fg="#8b5cf6", bg="#121216", bd=1, relief="solid", padx=10, pady=5)
+        right_pane.grid(row=0, column=1, sticky="nsew", padx=15, pady=15)
+        
+        guide_items = [
+            ("✊ Fist (0)", "Summarize active workspace file"),
+            ("☝️ 1 Finger", "Explain last terminal command error"),
+            ("✌️ Peace (2)", "AI Search query using clipboard text"),
+            ("🤟 3 Fingers", "Take screenshot & run vision query"),
+            ("🤘 4 Fingers", "Git add, commit & push changes"),
+            ("✋ Open (5)", "Quick Google search from clipboard"),
+            ("👐 2 Hands", "Open Gemini Web & paste clipboard")
+        ]
+        
+        for idx, (gesture_name, action_name) in enumerate(guide_items):
+            lbl_gest = tk.Label(right_pane, text=gesture_name, font=("Inter", 9, "bold"), fg="#a78bfa", bg="#121216", anchor="w")
+            lbl_gest.grid(row=idx, column=0, sticky="w", padx=4, pady=1)
+            
+            lbl_sep = tk.Label(right_pane, text="→", font=("Inter", 9), fg="#4b5563", bg="#121216")
+            lbl_sep.grid(row=idx, column=1, padx=4, pady=1)
+            
+            lbl_act = tk.Label(right_pane, text=action_name, font=("Inter", 9), fg="#e2e8f0", bg="#121216", anchor="w")
+            lbl_act.grid(row=idx, column=2, sticky="w", padx=4, pady=1)
         
         # 4. Expanded Area (hidden initially)
         self.exp_frame = tk.Frame(root, bg="#0c0c0e")
@@ -494,18 +606,21 @@ class HandShiftUI:
         if self.is_expanded:
             # Collapse
             self.exp_frame.grid_forget()
-            self.root.geometry("400x200")
+            self.root.geometry("720x280")
             self.toggle_btn.configure(text="▼ Expand Camera Feed & Logs")
             self.is_expanded = False
         else:
             # Expand
-            self.exp_frame.grid(row=3, column=0, sticky="nsew", padx=15, pady=5)
-            self.root.geometry("700x480")
+            self.exp_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=15, pady=5)
+            self.root.geometry("820x560")
             self.toggle_btn.configure(text="▲ Collapse Camera & Logs")
             self.is_expanded = True
 
     # Show Gemini Result in Toplevel Modal
     def show_result_popup(self, title, content):
+        # Programmatically strip markdown formatting
+        cleaned_content = self.clean_markdown_text(content)
+        
         popup = tk.Toplevel(self.root)
         popup.title(title)
         popup.geometry("600x450")
@@ -519,7 +634,7 @@ class HandShiftUI:
         # Scrollable Content
         text_area = scrolledtext.ScrolledText(popup, font=("Inter", 9), fg="#f8fafc", bg="#181822", bd=0, highlightthickness=0)
         text_area.pack(fill="both", expand=True, padx=15, pady=5)
-        text_area.insert("1.0", content)
+        text_area.insert("1.0", cleaned_content)
         text_area.configure(state="disabled")
         
         # Close button
@@ -527,6 +642,19 @@ class HandShiftUI:
         btn_frame.pack(fill="x", pady=10)
         close_btn = tk.Button(btn_frame, text="Close Report", font=("Inter", 9, "bold"), fg="#fff", bg="#8b5cf6", activeforeground="#fff", activebackground="#a78bfa", bd=0, padx=15, pady=6, cursor="hand2", command=popup.destroy)
         close_btn.pack(side="right", padx=15)
+        
+        return popup, title_lbl, text_area
+
+    def clean_markdown_text(self, text):
+        if not text:
+            return ""
+        # Remove bold/italic markers
+        text = re.sub(r'\*+', '', text)
+        # Remove header markers (#)
+        text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
+        # Remove code blocks and single backticks
+        text = text.replace('```', '').replace('`', '')
+        return text.strip()
 
 # Tkinter setup
 root = tk.Tk()
@@ -570,28 +698,43 @@ def update_frame():
                 cv2.circle(frame, (cx, cy), 5, (246, 92, 139), -1)
                 cv2.circle(frame, (cx, cy), 2, (255, 255, 255), -1)
                 
-    # Stable holds / debouncing
-    if detected == "none":
-        STABLE_GESTURE = "none"
-        LAST_TRIGGERED_GESTURE = "none"
-        HOLD_COUNT = 0
-        app_ui.update_gesture_ui("none", 0)
-    else:
-        if detected != STABLE_GESTURE:
-            STABLE_GESTURE = detected
-            HOLD_COUNT = 1
-            app_ui.update_gesture_ui(detected, 0)
+    # If sleeping, only watch for two_hands wake-up gesture
+    if app_ui.is_sleeping:
+        if detected == "two_hands":
+            if detected != STABLE_GESTURE:
+                STABLE_GESTURE = detected
+                HOLD_COUNT = 1
+            else:
+                HOLD_COUNT += 1
+                if HOLD_COUNT >= REQUIRED_HOLD_FRAMES and LAST_TRIGGERED_GESTURE != "two_hands":
+                    LAST_TRIGGERED_GESTURE = "two_hands"
+                    wake_up()
         else:
-            HOLD_COUNT += 1
-            progress = int((min(HOLD_COUNT, REQUIRED_HOLD_FRAMES) / REQUIRED_HOLD_FRAMES) * 100)
-            app_ui.update_gesture_ui(detected, progress)
-            
-            if HOLD_COUNT >= REQUIRED_HOLD_FRAMES and LAST_TRIGGERED_GESTURE != STABLE_GESTURE:
-                LAST_TRIGGERED_GESTURE = STABLE_GESTURE
-                
-                # Ingest & Execute Action
-                ingest_to_afferens(STABLE_GESTURE)
-                execute_gesture_action(STABLE_GESTURE)
+            STABLE_GESTURE = "none"
+            HOLD_COUNT = 0
+    else:
+        # Normal gesture processing
+        if detected == "none":
+            STABLE_GESTURE = "none"
+            LAST_TRIGGERED_GESTURE = "none"
+            HOLD_COUNT = 0
+            app_ui.update_gesture_ui("none", 0)
+        else:
+            if detected != STABLE_GESTURE:
+                STABLE_GESTURE = detected
+                HOLD_COUNT = 1
+                app_ui.update_gesture_ui(detected, 0)
+            else:
+                HOLD_COUNT += 1
+                progress = int((min(HOLD_COUNT, REQUIRED_HOLD_FRAMES) / REQUIRED_HOLD_FRAMES) * 100)
+                app_ui.update_gesture_ui(detected, progress)
+
+                if HOLD_COUNT >= REQUIRED_HOLD_FRAMES and LAST_TRIGGERED_GESTURE != STABLE_GESTURE:
+                    LAST_TRIGGERED_GESTURE = STABLE_GESTURE
+
+                    # Ingest & Execute Action
+                    ingest_to_afferens(STABLE_GESTURE)
+                    execute_gesture_action(STABLE_GESTURE)
                 
     # Display in GUI if expanded
     if app_ui.is_expanded:
