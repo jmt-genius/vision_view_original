@@ -1,0 +1,33 @@
+# Secrets
+.env
+
+# Node
+node_modules/
+package-lock.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Session & Reports
+session.log
+report_*.md
+
+# Test / Scratch
+test_gemini.py
+test_ingest.js
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

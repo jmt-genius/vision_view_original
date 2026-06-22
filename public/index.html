@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Vision Control Center - Physical Perception Agent Powered by Afferens MCP">
+  <title>Vision Control Center - Afferens Gestures</title>
+  
+  <!-- Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;700;800&display=swap" rel="stylesheet">
+  
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- MediaPipe Hand Tracking Dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="main-header">
+    <div class="brand">
+      <div class="logo-circle">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+      </div>
+      <h1>Vision Control Center</h1>
+    </div>
+    
+    <!-- Connection Badges -->
+    <div class="status-badges">
+      <div id="badge-camera" class="badge badge-error">Camera Off</div>
+      <div id="badge-model" class="badge badge-error">Model Loading</div>
+      <div id="badge-server" class="badge badge-success">Agent Server Ready</div>
+      <div id="badge-afferens" class="badge badge-loading">Afferens: Checking</div>
+    </div>
+  </header>
+
+  <!-- Main Interface Grid -->
+  <main class="dashboard-grid">
+    
+    <!-- Left Column: Camera and Gesture Preview -->
+    <section class="card camera-card">
+      <div class="card-header">
+        <h2>Physical Perception Feed</h2>
+        <span class="pulse-dot"></span>
+      </div>
+      
+      <!-- Video Container -->
+      <div class="video-wrapper">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div id="loading-overlay" class="overlay-modal">
+          <div class="spinner"></div>
+          <p>Initialising Hand Detection...</p>
+        </div>
+      </div>
+
+      <!-- Gesture Detection Status -->
+      <div class="gesture-display">
+        <div class="gesture-label">Detected Gesture</div>
+        <div id="current-gesture" class="gesture-val">None</div>
+        
+        <!-- Gesture Hold Progress -->
+        <div class="progress-bar-container">
+          <div id="hold-progress" class="progress-bar"></div>
+        </div>
+        <div class="gesture-instruction">Hold hand stable for 0.8s to trigger agent actions.</div>
+      </div>
+    </section>
+
+    <!-- Right Column: Status & Event Logs -->
+    <section class="right-column">
+      
+      <!-- System Action Diagnostics -->
+      <div class="card status-card">
+        <h2>System Workspace State</h2>
+        <div class="status-grid">
+          <div class="status-item">
+            <div class="status-title">Project Dev Server</div>
+            <div id="state-project-server" class="state-value val-inactive">Offline</div>
+          </div>
+          <div class="status-item">
+            <div class="status-title">hello.js Created</div>
+            <div id="state-hello-file" class="state-value val-inactive">No</div>
+          </div>
+          <div class="status-item">
+            <div class="status-title">Afferens Ingestion</div>
+            <div id="state-afferens-api" class="state-value val-inactive">Checking</div>
+          </div>
+        </div>
+        
+        <!-- Gesture Command Mapping Guide -->
+        <div class="mapping-guide">
+          <h3>Gesture Commands Reference</h3>
+          <ul>
+            <li>
+              <span class="gesture-bullet bullet-pointing"></span>
+              <strong>Pointing Finger (1 finger):</strong> Writes <code>hello.js</code> code file.
+            </li>
+            <li>
+              <span class="gesture-bullet bullet-peace"></span>
+              <strong>Peace Sign (2 fingers):</strong> Starts the workspace project server.
+            </li>
+            <li>
+              <span class="gesture-bullet bullet-open"></span>
+              <strong>Open Hand (5 fingers):</strong> Launches default browser & runs diagnostics.
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Live Event Logs Feed -->
+      <div class="card logs-card">
+        <div class="card-header">
+          <h2>Agent Execution Logs</h2>
+          <button id="btn-clear-logs" class="btn-clear">Clear UI Logs</button>
+        </div>
+        <div id="logs-container" class="logs-feed">
+          <div class="log-entry log-system">[SYSTEM] Agent Web Console ready. Waiting for hand gestures...</div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- JS Logic Script -->
+  <script src="app.js"></script>
+</body>
+</html>

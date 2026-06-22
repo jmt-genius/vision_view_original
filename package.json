@@ -1,0 +1,14 @@
+{
+  "name": "vision-view-agent",
+  "version": "1.0.0",
+  "description": "Continuous hand gesture monitoring agent using Afferens sensory layer",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "open": "^10.1.0"
+  }
+}
