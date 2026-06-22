@@ -351,33 +351,53 @@ def action_peace_sign(clipboard_text):
         
     run_async_action(f"AI Search: {clipboard_text[:30]}...", _perform)
 
-# 🤟 Three Fingers (3 fingers): Take Screenshot and Analyze
+# 🤟 Three Fingers (3 fingers): Take Screenshot, Copy to Clipboard, Open Gemini & Paste
 def action_three_fingers():
-    log_session_event("three_fingers", "Take Screenshot & Analyze")
+    log_session_event("three_fingers", "Take Screenshot & Paste to Gemini")
     
-    def _perform():
-        try:
-            screenshot = ImageGrab.grab()
-            img_path = Path(CONVERSATION_DIR) / "screenshot.png" if CONVERSATION_DIR else Path("screenshot.png")
-            screenshot.save(img_path)
+    try:
+        screenshot = ImageGrab.grab()
+        # Save to current workspace absolute path
+        img_path = Path("screenshot.png").resolve()
+        screenshot.save(img_path)
 
-            if not gemini_client:
-                return f"Screenshot saved to {img_path}. Gemini API key is missing to analyze."
+        # Copy image to clipboard natively depending on OS
+        if sys.platform == "win32":
+            powershell_cmd = f"Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('{img_path}'))"
+            subprocess.run(["powershell", "-Command", powershell_cmd], check=True)
+        elif sys.platform == "darwin":
+            osascript_cmd = f"set the clipboard to (read (POSIX file \"{img_path}\") as «class PNGf»)"
+            subprocess.run(["osascript", "-e", osascript_cmd], check=True)
+        
+        webbrowser.open("https://gemini.google.com")
+        
+        def paste_worker():
+            # Wait for browser window and page load to focus the input area
+            time.sleep(5.0)
+            try:
 
-            # Upload using Gemini SDK and run vision query
-            # (Note: Google GenAI SDK can take PIL images directly in contents)
-            prompt = "Analyze this screenshot. Describe what is on the screen, identifying any applications, code, or context clearly."
-            
-            response = gemini_client.models.generate_content(
-                model="gemini-3.5-flash",
-                contents=[prompt, screenshot]
-            )
-            
-            return f"Screenshot Analyzed ({img_path.name}):\n\n{response.text}"
-        except Exception as e:
-            return f"Failed to take screenshot or analyze: {e}"
-            
-    run_async_action("Screenshot Analysis", _perform)
+                # Paste the copied screenshot image
+                if sys.platform == "darwin":
+                    pyautogui.hotkey("command", "v")
+                else:
+                    pyautogui.hotkey("ctrl", "v")
+                
+                # Wait for the paste/upload to start processing
+                time.sleep(3.0)
+                
+                # Write the prompt text
+                pyautogui.write("analyze and explain this image")
+                time.sleep(2.0)
+                pyautogui.press('enter')
+            except Exception as e:
+                print(f"Failed to paste screenshot or write prompt: {e}")
+                
+        threading.Thread(target=paste_worker, daemon=True).start()
+        app_ui.show_result_popup("Gemini Screenshot Triggered", "Captured screenshot and copied it to your clipboard.\n\nOpening Gemini Web to paste and analyze the image...")
+        
+    except Exception as e:
+        app_ui.show_result_popup("Screenshot Error", f"Failed to capture or copy screenshot: {e}")
+
 
 # 🤘 Four Fingers (4 fingers): Git Add + Commit + Push
 def action_four_fingers():
@@ -441,8 +461,9 @@ def action_two_hands():
     
     def paste_worker():
         # Wait for browser window and page load to focus the input field
-        time.sleep(2.5)
+        time.sleep(5.0)
         try:
+
             # Paste the current clipboard content using PyAutoGUI (check for macOS cmd key)
             if sys.platform == "darwin":
                 pyautogui.hotkey("command", "v")
@@ -546,7 +567,7 @@ class HandShiftUI:
             ("✊ Fist (0)", "Summarize active workspace file"),
             ("☝️ 1 Finger", "Explain last terminal command error"),
             ("✌️ Peace (2)", "AI Search query using clipboard text"),
-            ("🤟 3 Fingers", "Take screenshot & run vision query"),
+            ("🤟 3 Fingers", "Copy screenshot & paste to Gemini"),
             ("🤘 4 Fingers", "Git add, commit & push changes"),
             ("✋ Open (5)", "Quick Google search from clipboard"),
             ("👐 2 Hands", "Open Gemini Web & paste clipboard")
