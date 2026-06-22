@@ -231,7 +231,8 @@ def classify_frame_gestures(multi_hand_landmarks):
 def run_async_action(title, action_func, *args, **kwargs):
     """Helper to run a heavy operation in a background thread and show a loading state popup."""
     # Instantiates the result popup immediately with a loading state
-    loading_msg = "⏳ Thinking... Please wait while the HandShift agent processes your request..."
+    loading_msg = "⏳ Thinking... Please wait while the Vision View agent processes your request..."
+
     popup, title_lbl, text_area = app_ui.show_result_popup(title, loading_msg)
     
     def worker():
@@ -409,7 +410,8 @@ def action_four_fingers():
             workspace = Path(".")
         commit_id = str(random.randint(1000, 9999))
 
-        commit_msg = f"handshift-{commit_id}"
+        commit_msg = f"vision-view-{commit_id}"
+
         results = []
         
         try:
@@ -417,8 +419,9 @@ def action_four_fingers():
             add_res = subprocess.run(["git", "add", "."], capture_output=True, text=True, cwd=workspace, check=True)
             results.append(f"$ git add .\n{add_res.stdout}{add_res.stderr}".strip())
 
-            # git commit -m "handshift-XXXX"
+            # git commit -m "vision-view-XXXX"
             commit_res = subprocess.run(["git", "commit", "-m", commit_msg], capture_output=True, text=True, cwd=workspace, check=True)
+
             results.append(f"$ git commit -m \"{commit_msg}\"\n{commit_res.stdout}{commit_res.stderr}".strip())
 
             # git push
@@ -441,8 +444,9 @@ def action_four_fingers():
 def action_open_hand(clipboard_text):
     log_session_event("open_hand", "Quick Google Search")
     if not clipboard_text:
-        clipboard_text = "HandShift gesture agent"
+        clipboard_text = "Vision View gesture agent"
     url = f"https://www.google.com/search?q={urllib.parse.quote(clipboard_text)}"
+
     webbrowser.open(url)
     app_ui.show_result_popup("Google Search Triggered", f"Searching Google for:\n\n'{clipboard_text}'")
 
@@ -511,10 +515,11 @@ def execute_gesture_action(gesture):
         action_two_hands()
 
 # Tkinter User Interface Class
-class HandShiftUI:
+class VisionViewUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("HandShift")
+        self.root.title("Vision View")
+
         self.root.configure(bg="#0c0c0e")
         self.root.geometry("720x280") # Start in compact mode with side-by-side layout
         self.root.resizable(False, False)
@@ -534,7 +539,8 @@ class HandShiftUI:
         header = tk.Frame(left_pane, bg="#0c0c0e", height=40)
         header.pack(fill="x", pady=4)
         
-        brand_label = tk.Label(header, text="HandShift", font=("Outfit", 14, "bold"), fg="#8b5cf6", bg="#0c0c0e")
+        brand_label = tk.Label(header, text="Vision View", font=("Outfit", 14, "bold"), fg="#8b5cf6", bg="#0c0c0e")
+
         brand_label.pack(side="left")
         
         # Status dot
@@ -686,7 +692,8 @@ class HandShiftUI:
 
 # Tkinter setup
 root = tk.Tk()
-app_ui = HandShiftUI(root)
+app_ui = VisionViewUI(root)
+
 
 # Global video capture reference
 cap = cv2.VideoCapture(0)
@@ -788,7 +795,8 @@ def main():
         messagebox.showerror("Camera Error", "Webcam could not be opened. Please verify video device connections.")
         sys.exit(1)
         
-    app_ui.append_log("[SYSTEM] HandShift Vision Agent Ready.")
+    app_ui.append_log("[SYSTEM] Vision View Agent Ready.")
+
     if GEMINI_API_KEY:
         app_ui.append_log("[SYSTEM] Gemini API loaded from .env")
     else:
