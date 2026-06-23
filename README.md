@@ -152,17 +152,6 @@ AFFERENS_API_KEY=your_afferens_api_key_here
 
 ---
 
-## Submission Requirements Checklist
-
-Before submitting, make sure the project aligns with the track requirements:
-
-- [x] **GitHub Repository:** Clean, structured codebase featuring this premium `README.md`.
-- [x] **Demo Video:** Walkthrough video demonstrating real-world gesture detection and automation. [Watch on YouTube](https://www.youtube.com/watch?v=45Cm8BxmnBQ).
-- [x] **Tool Integration:** Fully verified integration with the **Afferens API** (`X-API-KEY` ingestion flow) for physical gesture perception.
-- [x] **Grounded Perception & Action Loop:** Real-world gestures translate directly into digital outputs, creating a closed-loop system.
-
----
-
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
